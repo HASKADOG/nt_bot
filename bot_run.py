@@ -45,12 +45,6 @@ class StateManager(Client):
 state_m = StateManager(config)
 redis = Redis()
 
-with bot:
-    while True:
-        a = redis.get('msg')
-        if a:
-            bot.send_message('@WhileForInt', a.decode('UTF-8'))
-            redis.delete('msg')
 
 @bot.on_message(filters.command('start'), group=3)
 def start(client, msg):
