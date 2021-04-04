@@ -15,5 +15,3 @@ with user:
             redis.delete('msg')
 
 
-
-user.run()

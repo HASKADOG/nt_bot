@@ -20,14 +20,10 @@ def get_folders(user_id, folders):
     return folders_r
 
 
-    
-
-    
-
 def start(name):
     print('starting')
     app = Client(name)
-    redis = Redis
+    redis = Redis()
 
 
     @app.on_message()
@@ -37,12 +33,12 @@ def start(name):
 
         msg = 'Сообщение: {} | Папка: {}'.format(message['text'], get_folders(message['from_user']['id'], folders))
 
-        redis.set('msg', msg)
+        redis.hmset('msg', {"id": "WhileForInt", "text": msg})
 
     app.run()
 
 
-proc1 = Process(target=start, args=('admin',))
+proc1 = Process(target=start, args=('test_second',))
 proc2 = Process(target=start, args=('test',))
 
 proc1.start()
