@@ -1,5 +1,5 @@
 from pyrogram import Client, filters
-from pyrogram.errors import SessionPasswordNeeded
+from pyrogram.errors import SessionPasswordNeeded, PhoneNumberInvalid, PhoneCodeInvalid, PasswordHashInvalid
 from pyrogram.types.messages_and_media import message
 from multiprocessing import Process
 from config import Config
@@ -22,20 +22,26 @@ class StateManager(Client):
         pass
 
     def start_session(self, phone_number):
-        self.app = Client('test_second', self.api_id, self.api_hash)
-        self.app.connect()
-        self.phone = phone_number
-        self.code_hash = self.app.send_code(self.phone).phone_code_hash
-        print('Code_sent')
+        try:
+            self.app = Client('test_second', self.api_id, self.api_hash)
+            self.app.connect()
+            self.phone = phone_number
+            self.code_hash = self.app.send_code(self.phone).phone_code_hash
+
+            return True
+        except PhoneNumberInvalid:
+            return False
 
     def enter_code(self, code):
         print('Waiting for code')
         try:
             self.app.sign_in(self.phone, self.code_hash, code)
             self.app.disconnect()
-            return True
+            return "Fine"
         except SessionPasswordNeeded:
-            return False
+            return "SessionPasswordNeeded"
+        except PhoneCodeInvalid:
+            return "PhoneCodeInvalid"
 
     def enter_2fa(self, tfa):
         self.app.check_password(tfa)
@@ -72,7 +78,6 @@ def handlers():
         print('start')
         redis.hmset('msg', {"id": "WhileForInt", "text": "Введите номер"})
         state_m.make_state('wait_for_phone')
-        state_m.make_one(True)
 
 
     @bot.on_message(~filters.me, group=2)
@@ -81,11 +86,15 @@ def handlers():
             print('wait_code')
             phone_number = msg.text
             print('number {}'.format(phone_number))
-            state_m.start_session(phone_number)
-            redis.hmset('msg', {"id": "WhileForInt", "text": "Номер принят"})
-            sleep(0.5)
-            redis.hmset('msg', {"id": "WhileForInt", "text": "Введите код"})
-            state_m.make_state('wait_for_code')
+
+            if state_m.start_session(phone_number):
+                redis.hmset('msg', {"id": "WhileForInt", "text": "Номер принят"})
+                sleep(0.5)
+                redis.hmset('msg', {"id": "WhileForInt", "text": "Введите код"})
+                state_m.make_state('wait_for_code')
+            else:
+                redis.hmset('msg', {"id": "WhileForInt", "text": "Номер не верен! Проверьте корректность номера"})
+                sleep(0.5)
 
 
     @bot.on_message(~filters.me, group=1)
@@ -94,15 +103,22 @@ def handlers():
             print('wait_2fa')
             code = msg.text
 
-            if state_m.enter_code(code):
+            code_return = state_m.enter_code(code)
+
+            if code_return == "Fine":
                 redis.hmset('msg', {"id": "WhileForInt", "text": "Код принят"})
                 sleep(0.5)
                 redis.hmset('msg', {"id": "WhileForInt", "text": "Аккаунт добавлен"})
-            else:
+
+            elif code_return == "SessionPasswordNeeded":
                 state_m.make_state('wait_for_2fa')
                 redis.hmset('msg', {"id": "WhileForInt", "text": "Код принят"})
                 sleep(0.5)
                 redis.hmset('msg', {"id": "WhileForInt", "text": "Введите 2fa"})
+
+            elif code_return == "PhoneCodeInvalid":
+                redis.hmset('msg', {"id": "WhileForInt", "text": "Код не верен. Введите еще раз"})
+                sleep(0.5)
 
 
     @bot.on_message(~filters.me, group=0)
